@@ -1,0 +1,138 @@
+\chapter{Planeación}
+
+Pensemos de manera informal en el problema. Se debe identificar cuál es la
+forma óptima de llenar un álbum de estampas bajo los supuestos establecidos en
+la descripción original del problema.  Para esto, partiremos de algunas premisas
+adicionales no descritas en el documento, pero fundamentales para el desarrollo
+de la solución:
+
+\section{¿Cómo se llena un álbum?}
+
+ \begin{enumerate}[numeros]
+   \item El álbum vacío tiene el nombre de los jugadores en el recuadro donde
+   debe ir la estampa a como se ve en la imagen \ref{fig:inter1}. Esto aplica
+   para álbumes de estampa de la marca Panini.\footnote{\url{https://bit.ly/3LbnspI}} 
+   \item Las estampas tienen el nombre del jugador.
+   \item La forma de llenar el álbum es viendo el nombre del jugador en la
+   estampa y buscar la casilla con ese nombre en el álbum.
+   \item Si la casilla no está ocupada, pegaremos la estampa y la cantidad de
+   casillas pendientes de llenar en el álbum disminuye.
+   \item Si la casilla ya está ocupada diremos que tenemos una estampa repetida.
+ \end{enumerate}
+
+\begin{figure}[H]
+\includegraphics[width = \linewidth]{panini}
+\caption{Álbum de estampas de la marca Panini}
+   \label{fig:inter1}
+\end{figure}
+
+En la imagen \ref{fig:inter1} vemos la premisa más importante.
+
+\section{¿Cómo se organizan y distribuyen los álbumes?}
+
+Panini se encarga de sacar un álbum por cada evento deportivo significativo.
+Establezcamos los siguientes supuestos:
+
+ \begin{enumerate}[numeros]
+   
+   \item Todos los álbumes que Panini pone a la venta sobre un evento deportivo
+   (ej. Eurocopa 2018) \textbf{contienen los mismos jugadores}.  Es decir, no
+   saca un álbum con un grupo de jugadores y otro, del mismo evento, con otro
+   grupo.
+   
+   \item Para poder considerar 500 jugadores por álbum de manera exacta, se
+   asume que los jugadores que seleccionó Panini no están ordenados por equipo,
+   es decir, no tendremos un escenario donde digamos son 25 equipos con 20
+   jugadores cada uno.  Para efectos prácticos, asumiremos que Panini seleccionó
+   a 500 jugadores y no necesariamente están agrupados por equipo.
+ \end{enumerate}
+
+\section{Propuesta de solución}
+
+Con base a la especificaciones del problema del documento original y considerando
+los supuestos anteriores, una propuesta de algoritmo para solucionar este
+problema de optimización sería el siguiente:
+
+ \begin{table}[H]
+ \renewcommand{\arraystretch}{2}
+ \footnotesize
+     \centering
+     \ttfamily
+     \begin{tabular}{| P{2cm} m{13cm} |}
+     \hline
+          \textbf{Input:} & Una lista de álbumes $A[1..n]$ de longitud $n$ y cada uno de
+          ellos con $m$ cantidad de jugadores. \\
+          
+          \textbf{Output:} & La permutación de las secuencias de entrada tal que
+          $A[1..n] = 0$ \\
+          
+          Paso 1 &
+          
+          Sea $w$ el número de álbum en la lista de $n$ álbumes.
+          Para cada álbum $A[w..n]$ de la lista iterar hasta que $A[w..n] = n$\\
+          
+          Paso 2 &
+          
+          Sea $m$ la cantidad de casillas para estampas dentro del álbum.
+          Mientras la longitud del álbum $w[1..m] > 0$ iterar. \\
+          
+          Paso 3 &
+          
+          Abrir sobres.\\
+          
+          Paso 4 &
+          
+          Si las estampas dentro del sobre están duplicadas entonces:
+          guardar en una lista de repetidas $r$ y dejar únicas en una lista
+          $u$ \\
+          
+          Paso 5 &
+          
+          Si las estampas únicas $u$ ya están en el álbum $w$ entonces guardar
+          en una lista de discrepancias $d$ \\
+          
+          Paso 6 &
+          
+          Si las estampas únicas aun no están en el álbum $w$ entonces reducir
+          el tamaño del álbum al eliminar los nombres de jugadores que
+          coincidieron con dichas estampas. \\
+          
+          Paso 7 &
+          
+          Repetir paso 2 hasta cumplir condición en el álbum $w$ bajo
+          iteración.\\
+          
+          Paso 8 &
+          
+          Calcular métricas para el álbum $w$ y guardar en una lista de
+          estadísticas $e$\\
+          
+          Paso 9 &
+          
+          Repetir paso 1 hasta cumplir condición y haber iterado sobre todos
+          los álbumes del experimento $A[w..n]$ \\
+          
+          Paso 10 &
+          
+          Sumarizar $e$ y presentar resultados estadísticos en la forma de
+          gráficos y tablas.  Responder a las preguntas.\\
+          
+          \hline
+          \end{tabular}
+     \caption{Algoritmo para la simulación del llenado de álbumes}
+ \end{table}
+
+\begin{shaded}
+\textbf{El llenado de un álbum, desde el punto de vista del algoritmo, se basa
+en el proceso de comparar las estampas únicas con las casillas nombradas del
+álbum, de forma tal que, si hay coincidencias, se pega la estampa y la cantidad
+de casillas vacías se reduce, es decir el tamaño del álbum va disminuyendo hasta
+tener cero casillas vacías. Aquí consideramos que el álbum está lleno.}
+\end{shaded}
+
+En este orden de ideas es posible crear un modelo que consolide lo establecido
+en la tabla y genere los datos necesarios para dar respuesta a las interrogantes.
+
+
+
+

@@ -1,0 +1,629 @@
+\chapter{Desarrollo}
+
+Para garantizar la reproducibilidad, incrustaremos la totalidad del código, con
+la excepción de aquel destinado al formato, colores y temas de las gráficas.
+
+<<>>=
+import::from(parallel, detectCores, makePSOCKcluster, stopCluster)
+import::from(doParallel, registerDoParallel)
+import::from(patchwork, plot_layout, plot_annotation)
+import::from(scales, comma, label_dollar)
+import::from(magrittr, "%$%")
+import::from(data.table, "%chin%")
+pacman::p_load(fst, glue, tictoc, progressr, furrr, tidyverse)
+@
+
+
+\section{Jugadores}
+
+Del sitio \url{https://bit.ly/3uiWZ3M} se accedió a una base de datos de 
++10,000 jugadores de 11 países europeos para las temporadas 2008 a 2016 de la
+Eurocopa.
+
+<<>>=
+soccer_players <- read_fst("../soccer.fst") |> as_tibble()
+@
+
+<<eval=FALSE, include=FALSE>>=
+soccer_players <- read_fst("./soccer.fst") |> as_tibble()
+@
+
+
+<<>>=
+slice_sample(soccer_players, n = 8) |> tabla("Pool de Jugadores")
+@
+
+<<>>=
+futbolist <- soccer_players$player_name
+jugadores <- futbolist[rdunif(n = 1000, b = length(futbolist))] |> unique()
+@
+
+<<>>=
+str(jugadores, vec.len = 4)
+@
+
+<<>>=
+anyDuplicated(jugadores)
+@
+
+\section{Generar álbumes}
+
+Cada álbum tendrá distintos jugadores elegidos aleatoriamente. \textbf{Ningún
+jugador se repite dentro del álbum.} Cada álbum es un vector de tipo caracter.
+Veamos un ejemplo:
+
+<<>>=
+sample(x = jugadores, size = 500, replace = FALSE) |> str(vec.len = 4)
+@
+
+Posterior a la selección aleatoria de jugadores que estarán en el álbum de la
+Eurocopa, es necesario definir la cantidad de simulaciones que realizaremos, es
+decir, cuántos álbumes vamos a llenar para obtener los datos que necesitamos.
+Para esto crearemos la función \ti{\texttt{crear\_albumes\_vacios()}}.
+
+<<>>=
+crear_albumes_vacios <- function(tamano_simulacion) {
+ vector("list", length = tamano_simulacion) |> 
+  set_names(glue("album_{1:tamano_simulacion}"))
+}
+@
+
+De esta forma podemos crear la lista con los álbumes vacíos para luego emular
+el proceso de colocar el nombre de los jugadores en las casillas donde deben
+ir las estampas, exactamente como se ve en la imagen del álbum en la primera
+parte% \ref{fig:inter1}. Veamos
+un ejemplo:
+
+<<>>=
+crear_albumes_vacios(tamano_simulacion = 100) |> str(list.len = 3)
+@
+
+\section{Diccionario}
+
+\begin{table}[H]
+ \renewcommand{\arraystretch}{2}
+ \footnotesize
+     \centering
+     \ttfamily
+     \begin{tabular}{| P{2cm} | m{13cm} |}
+     \hline
+          {\centering \textbf{Variable}} & {\centering \textbf{Descripción}} \\
+          \hline    
+     
+          \va{sobres} &
+          
+          Total de sobres comprados para poder llenar el álbum\\
+          
+          \va{pesres} &
+          
+          Promedio de estampas repetidas por sobre. \\
+          
+          \va{pesrea} &
+          
+          Promedio de estampas repetidas por álbum.\\
+          
+          
+          \va{pescoa} &
+          
+          Promedio de estampas coincidentes por álbum.\\
+          
+          
+          \va{tesres} &
+          
+          Total de estampas repetidas en sobres. \\
+          
+          
+          \va{tesenp} &
+          
+          Total de estampas en posesión al final del llenado del álbum. \\
+          
+          \va{tescoa} &
+          
+          Total de estampas coincidentes al finalizar el llenado del álbum.\\
+          
+          \va{coslla} &
+          
+          Costo total de llenar el álbum con base al costo del sobre. \\
+          
+          \va{resexp} &
+          
+          Tibble (data.frame) con los resultados del experimento. \\
+          
+          \va{canops} &
+          
+          Tibble con el cálculo de la cantidad óptima de sobres. \\
+          
+          \va{numops} &
+          
+          Vector numérico de longitud 1 con la cantidad óptima de sobres. \\
+          
+          \va{nummes} &
+          
+          Vector numérico de longitud 1 con la cantidad mínima en la que se
+          cumple la condición de tener menos de 1 estampa nueva. \\
+          
+             \hline
+          \end{tabular}
+     \caption{Codebook}
+ \end{table}
+
+\section{Desarrollo}
+\label{sec:algo}
+
+A continuación definiremos el algoritmo principal como una función que se
+encarga de llenar los álbumes con base al álbum creado partiendo de un vector de
+caracteres de jugadores. Posteriormente definiremos una función que consolide
+todas las funciones que hemos definido de forma tal que sea sencillo realizar
+las simulaciones utilizando diferentes \textbf{instancias} de entrada.
+
+\subsection{Algoritmo}
+
+Para la creación de objetos siempre hay que realizar una asignación previa de
+memoria, tanto para data.frames como para listas
+\citep[pag. ~49]{gillespie_efficient_2017}, siguiendo la pauta de \textbf{nunca
+hacer crecer un objeto.} Si no creamos la lista previamente, R irá copiando los
+datos de las iteraciones anteriores generando una complejidad cuadrática
+$\bm{O(n^{n})}$ \citep[pag. ~319]{wickham_r_2017}
+
+<<>>=
+llenar_albumes <- function(lista_albumes, jugadores, con_reemplazo = TRUE) {
+  p <- progressor(steps = length(lista_albumes))
+  estadi <- vector("list"); conteo <- vector("list")
+  opcion <- furrr_options(seed = 2021)
+  
+  estadi <- future_imap(lista_albumes, ~ {
+    p(); i <- 0
+    discrepan <- vector("list"); repetidas <- vector("list"); coinciden <- vector("list")
+    
+    while (length(.x) > 0) {
+     i <- i + 1
+     sobre_estampas <- sample(jugadores, size = 5, replace = con_reemplazo)
+     repetidas[[i]] <- sobre_estampas[duplicated(sobre_estampas)]
+     estampas_unica <- unique(sobre_estampas)
+     coinciden[[i]] <- intersect(estampas_unica, .x) # no deberían haber repetidas en la lista
+     discrepan[[i]] <- setdiff(estampas_unica, .x)
+     .x <- .x[!.x %chin% coinciden[[i]]]
+    }
+   list(list(sobres = i,
+             pesres = repetidas |> map(length) %>% unlist() %>% mean(),
+             pesrea = discrepan |> map(length) %>% unlist() %>% mean() ,
+             pescoa = coinciden |> map(length) %>% unlist() %>% mean(),
+             tesres = repetidas |> map(length) |> reduce(`+`),
+             tesenp = discrepan |> map(length) |> reduce(`+`),
+             tescoa = coinciden |> map(length) |> reduce(`+`)),
+  conteo[[.y]] <- discrepan |> map(length) |> enframe(name = "sobre") |> unnest(value))
+  }, .options = opcion)
+}
+@
+
+A como explicamos previamente, el algoritmo tiene dos partes principales. La
+más importante es la iteración en cada álbum, en la que vamos validando si las
+estampas que vienen en el sobre ya se encuentran en el álbum o no. La estructura
+de datos óptima para guardar datos de estampas repetidas en sobres y estampas
+repetidas en cada álbum es la \im{lista}, ya que es posible hacerla crecer sin
+que se presente una merma en el desempeño. La segunda parte es la iteración
+sobre cada álbum, el cual se realiza utilizando la función
+\ti{future\_imap\_dfr()}, la cual es una versión paralelizada de
+\ti{purrr::imap\_dfr()}. Estas funciones son análogas a los bucles \im{for} con
+la ventaja de ser más flexibles, concisos y posibles de paralelizar
+\citep[pag. ~199]{wickham_advanced_2019}
+
+\subsection{Wrapper}
+
+Crearemos una función de tipo envoltorio para poder encapsular y unificar todas
+las funciones previas junto con el algoritmo principal. De esta forma será más
+sencillo realizar diversas simulaciones gracias a la generalización de las
+instancias de entrada.
+
+La función \ti{\texttt{simular()}} contiene funciones auxiliares para poder
+medir en segundos la duración de cada fragmento de código que realiza una
+tarea específica.  Con el paquete $\bm{\left \{tictoc \right \}}$ podemos separar
+las tareas y generar en la salida cuanto fue la duración de cada una de ellas.
+
+Dentro del paradigma funcional algo que deseamos evitar en una función son los
+efectos colaterales (\emph{side-effects})
+\citep[pag. ~9]{rodrigues_functional_2017} lo
+% \citep[pag. ~319]{wickham_r_2017}
+más posible, en este caso podemos ver el uso del símbolo $\twoheadleftarrow$
+llamado \emph{scope assigment}.  Esto significa que estamos creando nuevos
+objetos en el ambiente.
+
+<<>>=
+simular <- function(vector_jugadores, cantid_jugadores, cantid_dealbumes, 
+                    reemplazo = TRUE, costo = 5) {
+  
+  tic.clearlog()
+  tic("cargar albumes")
+  eurocop <- sample(x = vector_jugadores, size = cantid_jugadores, replace = FALSE)
+  albumes <- crear_albumes_vacios(tamano_simulacion = cantid_dealbumes) |> 
+    map(~ { .x <- eurocop })
+  toc(log = TRUE, quiet = TRUE)
+  
+  tic("crear clusters")
+  all_cores <- detectCores(logical = FALSE)
+  clusterpr <- makePSOCKcluster(all_cores)
+  registerDoParallel(clusterpr)
+  toc(log = TRUE, quiet = TRUE)
+  
+  tic("llenar albumes")
+  with_progress({
+    lista_cruda <- llenar_albumes(lista_albumes = albumes, jugadores = eurocop,
+                                  con_reemplazo = reemplazo)
+  })
+  toc(log = TRUE, quiet = TRUE)
+  
+  tic("calcular optimos")
+  optimos <<- lista_cruda |>
+   flatten() |>
+   keep(is_tibble) |>
+   set_names(glue("album_{1:cantid_dealbumes}")) |>
+   bind_rows() |>
+   group_by(sobre) |>
+   summarise(media = mean(value))
+  toc(log = TRUE, quiet = TRUE)
+  
+  tic("calcular estadisticas")
+  resexp <<- lista_cruda |>
+   flatten() |>
+   discard(is_tibble) |>
+   set_names(glue("album_{1:cantid_dealbumes}")) |>
+   bind_rows() |> 
+   mutate(coslla = sobres * costo)
+  toc(log = TRUE, quiet = TRUE)
+  
+  tic("parar clusters")
+  stopCluster(clusterpr)
+  unregister()
+  plan(sequential)
+  toc(log = TRUE, quiet = TRUE)
+}
+@
+
+\subsection{Paralelización}
+
+A como se mencionó en la sección \hyperref[sec:algo]{algoritmo}, al hacer uso
+de paralelismo para realizar de forma más eficiente la simulación, es necesario
+detener el cluster una vez ha finalizado el proceso.  Dentro de la función
+\ti{\texttt{simular()}} se utiliza la función \ti{\texttt{unregister()}} para
+detener esto.
+
+<<>>=
+unregister <- function() {
+   env <- foreach:::.foreachGlobals
+   rm(list = ls(name = env), pos = env)
+ }
+@
+
+\section{Simulación}
+
+<<eval=FALSE>>=
+simular(vector_jugadores = jugadores, cantid_jugadores = 500, cantid_dealbumes = 10000)
+@
+
+
+<<echo=FALSE, eval=FALSE>>=
+optimos  <- read_fst("./simulaciones/optimos_dieznmil.fst") |> as_tibble()
+resexp <- read_fst("./simulaciones/resexp_diezmil.fst") |> as_tibble()
+@
+
+<<echo=FALSE>>=
+optimos  <- read_fst("../simulaciones/optimos_dieznmil.fst") |> as_tibble()
+resexp <- read_fst("../simulaciones/resexp_diezmil.fst") |> as_tibble()
+@
+
+<<echo=FALSE>>=
+cds <- comma(nrow(resexp))
+@
+
+Al finalizar la simulación se crean dos objetos, uno llamado \ro{resexp} que
+contiene los datos del experimentos y el otro denominado \ro{óptimo} el cual nos
+ayuda a comprender cuánto es la cantidad óptima de sobres a comprar. Los
+resultados del experimento para las \Sexpr{cds} corridas.
+
+<<eval=FALSE, include=FALSE>>=
+# fst::write_fst(x = optimos, path = "./simulaciones/optimos_dieznmil.fst", compress = 0)
+# fst::write_fst(x = resexp, path = "./simulaciones/resexp_diezmil.fst", compress = 0)
+@
+
+Veamos una muestra de los resultados:
+
+<<>>=
+slice_sample(resexp, n = 10) |> tabla("Muestra aleatoria de los resultados")
+@
+
+Antes de analizar los resultados, veamos el desempeño de la simulación:
+
+<<eval=FALSE>>=
+des <- tic.log(format = TRUE) |> 
+  map(~ str_split(.x, ":")) |> 
+  flatten() %>%
+  set_names(map(., ~ pluck(.x, 1))) |> 
+  map(~ pluck(.x, 2) |> str_trim() |> parse_number()) |>   
+  enframe(name = "tarea", value = "tiempo_seg") |> 
+  rowid_to_column(var = "id") |> 
+  unnest("tiempo_seg") |> 
+  mutate(tiempo_minutos = round(tiempo_seg / 60, 2))
+@
+
+<<eval=FALSE, include=FALSE>>=
+# fst::write_fst(x = des, path = "./simulaciones/desempeno.fst", compress = 0)
+@
+
+<<echo=FALSE>>=
+des <- read_fst("../simulaciones/desempeno.fst") |> as_tibble()
+@
+
+<<desempeno>>=
+des |> tabla(cap = "Desempeño Algoritmo")
+@
+
+<<echo=FALSE>>=
+miu <- des[3, 4, drop = T]
+@
+
+
+En la tabla \ref{tab:desempeno} vemos que para llenar \Sexpr{cds} álbumes fue
+necesario correr la simulación durante \Sexpr{miu} minutos, considerando que
+estamos usando 12 nucleos físicos.
+
+
+\section{Análisis}
+
+Basado en las \Sexpr{cds} corridas se deberán reportar los siguientes
+resultados:
+
+ \begin{itemize}[itemsep=1ex]
+  
+  \item Número máximo, mínimo,  promedio y distribución (para esto se debe
+  construir un histograma con los 1000 o más datos del total de sobres para cada
+  corrida) de sobres necesarios para llenar el álbum.
+  
+  \item Cantidad máxima, mínima, promedio y distribución de estampas repetidas
+  totales con las que se queda al terminar de llenar el álbum (recuerde que no
+  se puede intercambiar o vender estampas por lo que se asume que las estampas
+  repetidas quedan en su poder)  
+  
+  \item Costo mínimo, máximo, promedio y distribución para llenar el álbum.
+  
+  \item Realizar un análisis estadístico de los resultados obtenidos y que
+  se especifican en los incisos anteriores
+  
+ \end{itemize}
+
+A continuación el análisis de lo solicitado en los incisos:
+
+<<>>=
+estimar_densidad <- function(df, d, color, titulo) {
+ 
+ brk <- hist(df[[d]], plot = FALSE)$breaks 
+ e <- summary(df[[d]], digits = 4)[c(1,3,4,6)] %>% set_names(make_clean_names(names(.)))
+ com <- e  |> map_chr(comma, accuracy = 0.1)
+ ley <- glue('Media: {com[3]} | Mediana: {com[2]} | min: {com[1]} | max: {com[4]}')
+ 
+ df %>% 
+  ggplot(aes(x = .data[[d]], y = ..density..)) +
+  geom_histogram(fill   = color, colour = "black", size = .2, breaks = brk) +
+  scale_x_continuous(name = d, breaks = brk) +
+  geom_density(size = 1) +
+  geom_vline(xintercept = e[["median"]],linetype = "dashed", color = "red",  alpha = 0.5) +
+  geom_vline(xintercept = e[["mean"]],  linetype = "dashed", color = "blue", alpha = 0.5) +
+  labs(title = titulo, subtitle = ley) +
+  yunkel + theme(plot.title = element_text(size = 16),plot.subtitle = element_text(size = 12),
+                 axis.text = element_text(size = 8))
+}
+@
+
+<<>>=
+ren <- resexp %>% select(where(is.numeric)); pal <- palette_OkabeIto[1:ncol(ren)]
+ndv <- names(ren)
+nar <- c("Sobres comprados para llenar el álbum", "Promedio estampas repetidas por sobre",
+  "Promedio estampas repetidas por álbum", "Promedio estampas coincidentes por álbum",
+  "Total estampas repetidas en sobres",
+  "Total estampas en posesión al final del llenado del álbum",
+  "Total estampas coincidentes al final del llenado del álbum",
+  "Costo total de llenar el álbum")
+@
+
+\subsection{Análisis estadístico}
+
+<<include=FALSE>>=
+fun_prop <- list(
+	minimo   = ~ min(.x), 
+	maximo   = ~ max(.x),
+	promedio = ~ mean(.x)
+)
+rem <- resexp[c(1, 6, 8)]
+@
+
+<<include=FALSE>>=
+fem <- rem |> summarise(across(everything(), fun_prop)) |>
+  pivot_longer(cols = everything(), 
+               names_to = c("var", "stat"),
+               names_pattern = "(.*)_(.*)",
+               values_to = "valores") |> 
+  pivot_wider(names_from = var, values_from = valores)
+@
+
+<<include=FALSE>>=
+quetzales <- label_dollar(prefix = "Q")
+@
+
+<<include=FALSE>>=
+fes <- fem |> mutate(across(where(is.numeric), comma, accuracy = 0.1))
+@
+
+<<include=FALSE>>=
+smin <- fem[1, "sobres", T]; tmin <- fem[1, "tesenp", T]; cmin <- fem[1, "coslla", T] 
+sman <- fem[2, "sobres", T]; tman <- fem[2, "tesenp", T]; cman <- fem[2, "coslla", T] 
+sprn <- fem[3, "sobres", T]; tprn <- fem[3, "tesenp", T]; cprn <- fem[3, "coslla", T] 
+@
+
+<<include=FALSE>>=
+smi <- fes[1, "sobres", T]; tmi <- fes[1, "tesenp", T] 
+sma <- fes[2, "sobres", T]; tma <- fes[2, "tesenp", T]; 
+spr <- fes[3, "sobres", T]; tpr <- fes[3, "tesenp", T]; 
+@
+
+<<include=FALSE>>=
+ftx <- list(cmin, cman, cprn) |> map(quetzales)
+cmi <- ftx[[1]]
+cma <- ftx[[2]]
+cpr <- ftx[[3]]
+@
+
+El siguiente análisis se realiza con base a la gráfica \ref{fig:dis}.
+
+  \begin{enumerate}[numeros]
+   
+   \item \textbf{Sobres:} La distribución de los sobres necesarios para llenar
+   el álbum es asimétrica con sesgo positivo. El mínimo número de sobres que
+   podrían comprarse es de \Sexpr{smi} sobres considerando que la aparición de
+   las estampas en el sobre sigue una distribución uniforme con igual
+   probabilidad para cada una de las estampas totales del álbum. El número
+   máximo de sobres que se obtuvo en las simulaciones fue de \Sexpr{sma} sobres,
+   es decir, una diferencia de \Sexpr{sman-smin} solo producto del azar.  En
+   promedio se necesitan \Sexpr{spr} sobres para llenar un álbum.
+   
+   \item \textbf{Estampas sobrantes:} En el cuadrante 6 de la gráfica
+   \ref{fig:dis} vemos cuantas estampas repetidas nos fueron quedando por cada
+   álbum al que íbamos simulando su llenado. Como es de esperarse, al igual que
+   con el caso de los sobres, hay un distribución con sesgo positivo, implicando
+   que hay muchos casos en que sobraron muchas estampas.  En promedio nos quedan
+   al final del llenado \Sexpr{tpr} estampas.  El mínimo de estampas que nos
+   podrían quedar es de \Sexpr{tmi}, pero podríamos llegar a acumular hasta
+   \Sexpr{tma}.
+   
+   \item \label{cot} \textbf{Costo:} En promedio llenar un álbum de manera
+   convencional, es decir, comprando únicamente sobres y siguiendo las
+   condiciones establecidas de no realizar intercambios es de \Sexpr{cpr}. Lo
+   menos que podríamos gastar con un poco de suerte son \Sexpr{cmi}, pero si
+   tenemos muy mala suerte esto podría ascender hasta los \ro{\Sexpr{cma}}.
+   
+ \end{enumerate}
+
+
+\begin{figure}[H]
+<<fig.asp=1>>=
+list(ndv, pal, nar) |> pmap(~ estimar_densidad(df = ren, d = ..1, color = ..2, titulo = ..3)) |> 
+  reduce(.f = `+`) + plot_layout(ncol = 2) +
+  plot_annotation(title    = glue("Distribuciones obtenidas con {cds} simulaciones"), 
+                  subtitle = "Estimación de estadísticos de relevancia", theme = yunkel) 
+@
+
+\caption{Distribución de las variables analizadas}
+   \label{fig:dis}
+\end{figure}
+
+\subsection{Menos de una estampa nueva por sobre}
+
+¿A partir de cuantos sobres comprados se tiene menos de 1 estampa nueva
+(no repetida) en promedio por cada sobre?
+
+Primero calculemos el punto exacto en el que la cantidad de estampas repetidas
+es mayor a 4 o lo que es lo mismo, tener menos de una estampa nueva en promedio
+por cada sobre.
+
+<<>>=
+canops <- optimos %>% 
+   filter(media > 4) |> 
+   arrange(media) |> 
+   filter(row_number(media) == which.min(sobre)) |>   
+   mutate(estampa_nueva = 5 - media)
+@
+
+<<>>=
+canops |> tabla(cap = "Optimo de sobres")
+@
+
+<<>>=
+numops <- canops$sobre; nummes <- canops$media
+@
+
+\begin{figure}[H]
+<<>>=
+optimos |> ggplot(aes(x = sobre, y = media)) +
+  scale_y_continuous(name = "Promedio de Estampas Repetidas por Álbum", breaks = seq(0, 6, 1)) +
+  scale_x_continuous(name = "Cantidad de Sobres Comprados") + 
+  geom_line() +
+  geom_vline(xintercept = numops, linetype = "dotted", col = "red", alpha = 1) +
+  geom_hline(yintercept = nummes, linetype = "dotted", col = "red", alpha = 1) +
+  annotate(geom = "point", x = numops, y = nummes, color = "darkgreen") +
+  labs(title = glue("A partir de los {numops} sobres se tiene menos de 1 estampa nueva"),
+       subtitle = glue("Experimento realizado con {cds} simulaciones")) +
+  yunkel + theme(plot.title = element_text(size = 26), plot.subtitle = element_text(size = 19))
+ 
+@
+
+\caption{Cantidad óptima de sobres a comprar}
+   \label{fig:dis2}
+\end{figure}
+
+\subsection{Punto óptimo de cambiar a estampas sueltas}
+
+Suponga que el costo de un sobre de 5 estampas es de Q5.00 y que, si desea
+comprar estampas sueltas en los canastos del portal, le costaría también Q5.00
+cada una.  Suponga, como ya se indicó, que intercambiar estampas no es una
+posibilidad, entonces, dada la anterior información y solo basándose en la
+gráfica, en que momento cree que se vuelve conveniente la opción de comprar
+estampas sueltas y dejar de comprar sobres, en otras palabras, ¿cuantos sobres
+máximo recomendaría comprar?
+
+\begin{shaded}
+Recomendaría comprar máximo \Sexpr{numops} sobres ya que a partir de ese momento
+me sale menos de una estampa nueva y es mejor comprarlas al menudeado con la
+ventaja de poder elegir las estampas faltantes.
+\end{shaded}
+
+\subsection{Comparación de costos}
+
+Con base a la respuesta al inciso anterior, haga una comparación de costos
+entre las distintas opciones, es decir, cuánto costaría (en promedio, máximo y
+mínimo) llenar el álbum solo comprando sobres, cuánto podría costar si solo
+comprara estampas sueltas y cuál sería el costo de su propuesta haciendo una
+combinación de comprar sobres y estampas sueltas.
+
+A como mencionamos en el punto \ref{cot} del análisis estadístico, el costo
+promedio de llenar el álbum solo comprando sobres sería:
+
+<<comparacion>>=
+summary(resexp$coslla, digits = 5)[-c(2, 3, 5)] |>
+ enframe(value = "sobres") |> 
+ left_join(resexp |> mutate(coslls = coslla * 5) %$%
+           summary(coslls)[-c(2, 3, 5)] |> enframe(value = "estampas"),
+           by = "name") |> 
+ mutate(across(sobres:estampas, as.numeric),
+        delta = estampas - sobres,
+        across(where(is.numeric), quetzales)) |> 
+ tabla(cap = "Comparación de costos")
+@
+
+En la tabla \ref{tab:comparacion} vemos que comprar estampas sueltas es en
+promedio 5 veces más caro. Esto debido a que la relación es lineal.
+
+
+<<propuesta>>=
+tibble(promedio      = round(sprn,2),
+       optimo        = numops,
+       diferencia    = ceiling(promedio - optimo),
+       precio        = 5,
+       costo_optimos = optimo * precio) |> 
+    tabla(cap = "Álbum")
+@
+
+
+\begin{shaded}
+En la tabla \ref{tab:propuesta} vemos que solo comprar los sobres óptimos nos
+sale a Q825. Sin embargo, aun quedan estampas pendiente de llenar en el álbum.
+Una manera de estimar las estampas faltantes sería utilizar la cantidad de sobres
+promedio necesarios para llenar el álbum y restarle la cantidad óptima. Esto nos
+da que faltarían 517 sobres aproximadamente. Recordemos que el álbum solo tiene
+500 casillas.  Debido a que no podemos decir que harían falta 517 x 5 estampas,
+entonces habría que ver cuantas casillas quedan pendientes de llenar después de
+haber completado 165 sobres. Estas pendientes multiplicado por el precio de la
+estampa nos da la combinación óptima.
+\end{shaded}
+
+\phantomsection
+\addcontentsline{toc}{section}{Referencias}
+\bibliography{sa}
+\bibliographystyle{apalike}

@@ -1,0 +1,48 @@
+\chapter{Diseño del Algoritmo}
+
+\IncMargin{1em}
+\begin{algorithm}
+\SetAlgoLined
+\DontPrintSemicolon
+\BlankLine
+\KwData{Lista de álbumes $L = A \times J$ en la forma $(A_{1}, A_{2}, ...\; A_{n})$
+        tales que cada álbum $A$ contiene una cantidad igual de $J$ de jugadores.}
+\BlankLine
+\KwResult{Las permutaciones de las secuencias de entrada tal que la cantidad de
+casillas vacías en cada álbum $(A_{1}, A_{2}, ...\; A_{n}) = 0$}
+\BlankLine
+\Begin{
+  
+  $est \longleftarrow \emptyset$;
+  $con \longleftarrow \emptyset$\;
+  
+  \ForEach{álbum $A$ de $L$}{
+    
+    $dis \longleftarrow \emptyset$; 
+    $rep \longleftarrow \emptyset$;
+    $coi \longleftarrow \emptyset$\;
+    
+    $i \longleftarrow 0$;
+    
+    \While{$len(A) > 0$}{
+    
+      $i \longleftarrow i + 1$\;
+      \emph{abrir sobre de estampas}\;
+      $rep[i] \leftarrow GuardarRepetidas$\;
+      \emph{determinar estampas únicas}\;
+      \emph{comparar estampas únicas con casillas en el álbum $A[i]$}\;
+      $dis[i] \leftarrow GuardarDiscrepancias$\;
+      $coi[i] \leftarrow GuardarCoincidencias$\;
+      \emph{reducir la longitud del álbum $x$ al marcar las que coinciden}\;
+    
+    }
+    \emph{calcular estadísticas del álbum $A[i]$}\;
+    \emph{calcular cantidad óptima de sobres}\;
+  }
+  \emph{devolver lista de resultados}\;
+ }
+ 
+\caption{Llenar álbumes}
+\end{algorithm}
+\DecMargin{1em}
+
