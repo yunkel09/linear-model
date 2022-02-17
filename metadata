@@ -1,0 +1,19 @@
+
+
+
+<<portadx, child='secciones/00_portada.Rnw'>>=
+
+@
+
+
+<<eda, child='secciones/01_eda.Rnw'>>=
+
+@
+
+<<al, child='secciones/02_algoritmo.Rnw'>>=
+
+@
+
+<<desarrollox, child='secciones/03_desarrollo.Rnw'>>=
+
+@

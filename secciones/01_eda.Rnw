@@ -1,0 +1,74 @@
+\chapter{Análisis Exploratorio}
+
+\section{Paquetes}
+
+<<>>=
+import::from(skimr, skim)
+import::from(colorblindr, scale_fill_OkabeIto)
+import::from(DataExplorer, plot_intro)
+pacman::p_load(glue, tidyverse)
+@
+
+\section{Cargar datos}
+
+<<>>=
+bank <- read_csv(file      = "bank.csv",
+                 col_types = "ciffdfiffff",
+                 lazy      = FALSE)
+@
+
+<<eval=FALSE, include=FALSE>>=
+bank <- read_csv(file = "./bank.csv",
+                 col_types = "ciffdfiffff",
+                 lazy = FALSE)
+@
+
+\begin{figure}[H]
+<<>>=
+plot_intro(bank, title = "Descripción de variables Bank Data", ggtheme = yunkel)
+@
+\caption{Exploracion de variables}
+   \label{fig:intro}
+\end{figure}
+
+En la figura \ref{fig:intro} vemos que la mayoría de las columnas son discretas
+de tipo factor. No hay valores perdidos de tipo \ro{NA} y todas las filas están
+completas.
+
+<<>>=
+bank %>%
+   skim() %>%
+   as_tibble() %>%
+   select(variable  = skim_variable,
+          tipo      = skim_type,
+          recuento  = factor.top_counts) |> 
+   tabla("Tipo de variable de acuerdo a su clasificación")
+@
+
+\section{Distribución Income}
+
+Explore gráficamente la forma de la distribución de la variable “income” y haga
+un análisis estadístico descriptivo de dicha variable.
+
+\begin{figure}[H]
+<<>>=
+brk <- hist(bank[["income"]], plot = FALSE)$breaks
+
+bank %>% 
+	ggplot(aes(x = income, y = ..density..)) +
+	geom_histogram(fill   = "gray40",
+	               colour = "black",
+	               size   = .2,
+	               breaks = brk) +
+   scale_x_continuous(name   = "Income", breaks = brk) +
+	geom_density(size = 1) +
+	labs(title = "Income") + yunkel
+@
+\caption{Interpretación de resultados}
+   \label{fig:dis}
+\end{figure}
+
+En la figura \ref{fig:dis} se observa que la distribución de la variable
+\va{income} es unimodal con sesgo positivo sin valores atípicos aparentes. 
+
+

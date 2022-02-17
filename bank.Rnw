@@ -25,11 +25,6 @@ ItalicFont = SouvenirStd-LightItalic.otf,
 BoldItalicFont = Souvenir-BoldItalic.otf]
 
 
-% \setmainfont{ACASLONPRO-REGULAR.OTF}[
-% Ligatures=TeX,
-% BoldFont = ACASLONPRO-BOLD.OTF,
-% ItalicFont = ACASLONPRO-ITALIC.OTF,
-% BoldItalicFont = ACASLONPRO-BOLDITALIC.OTF]
 \setmonofont[Scale=0.8,
              Contextuals = Alternate,
              Ligatures = TeX]{JetBrains Mono}
@@ -49,10 +44,7 @@ BoldItalicFont = Souvenir-BoldItalic.otf]
 
 % ALGORITMOS ===================================================================
 
-% \usepackage{algorithms}
-% \usepackage{algpseudocode}
-\usepackage[ruled, vlined, linesnumbered]{algorithm2e}
-
+% \usepackage[ruled, vlined, linesnumbered]{algorithm2e}
 
 % ==============================================================================
 
@@ -293,11 +285,9 @@ BoldItalicFont = Souvenir-BoldItalic.otf]
 
 % VARIABLES GENERALES ==========================================================
 \def\maestria{MASTER IN APPLIED DATA SCIENCE}
-\def\titulo{Álbum de Estampas}
+\def\titulo{Statistical Analysis - Bank Data}
 \def\autor{William Chavarría Zamora}
-\def\director{Docente: José Antonio Medrano García}
-\def\entidad{ENTIDAD COLABORADORA:}
-\def\fecha{24 de Febrero de 2022}
+\def\fecha{17 de Febrero de 2022}
 % ==============================================================================
 
 
@@ -366,6 +356,7 @@ options(pillar.sigfig    = 5,
         tibble.print_min = 10,
         scipen = 999,
         digits = 7,
+        readr.show_col_types = FALSE,
         dplyr.summarise.inform = FALSE)
 
 set.seed(2021)
@@ -419,31 +410,19 @@ knit_hooks$set(document = function(x) {sub('\\usepackage[]{color}',
 @
 
 % aqui va la portada
-<<portadx, child='secciones/00_portada.Rnw'>>=
 
-@
-
-
-\renewcommand{\contentsname}{Índice}
-\tableofcontents
+% \renewcommand{\contentsname}{Índice}
+% \tableofcontents
 % 
 % \addtocontents{toc}{\protect\thispagestyle{empty}} % quitar número de página 
 \pagenumbering{arabic}
 \setcounter{page}{1} % establecer pag 1
 
 % aquí van las secciones
-% 
-
-<<planx, child='secciones/01_planeacion.Rnw'>>=
-
-@
-
-<<algox, child='secciones/02_algoritmo.Rnw'>>=
+ 
+<<eda, child='secciones/01_eda.Rnw'>>=
 
 @
 
-<<desarrollox, child='secciones/03_desarrollo.Rnw'>>=
-
-@
 
 \end{document}
