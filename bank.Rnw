@@ -272,7 +272,7 @@ BoldItalicFont = Souvenir-BoldItalic.otf]
   \pagestyle{fancy}
   \fancyhf{}
   \fancyhead{}
-  \fancyhead[R]{\textbf{MDS}}
+  \fancyhead[R]{\textbf{UVG}}
   \fancyhead[L]{\rightmark}
   \fancyfoot[L]{Maestría en Data Science}
   \fancyfoot[R]{\thepage}
@@ -344,11 +344,17 @@ opts_chunk$set(echo        = TRUE,
                strip.white = TRUE, 
                # fig.width   = 5, 
                # fig.height  = 3,
-               fig.width   = 9,
+               fig.width   = 7,
                fig.asp     = 0.618,
                out.extra = '',
                fig.path    = "figure/",
                fig.align   = "center")
+
+# definir formato del código
+opts_knit$set(out.format = "latex")
+thm <- knit_theme$get("biogoo")
+# thm <- knit_theme$get("acid")
+knit_theme$set(thm)
 
 
 # establecer opciones generales
@@ -367,17 +373,23 @@ knit_hooks$set(document = function(x) {sub('\\usepackage[]{color}',
                                            x, 
                                            fixed = TRUE)})
 
-# importar solo las funciones necesarias de cada paquete
+
+ conserje <- c("tabyl",
+              "adorn_pct_formatting",
+              "adorn_totals",
+              "make_clean_names")
+
+ import::from("janitor", conserje, .character_only = TRUE)
+
+ # importar solo las funciones necesarias de cada paquete
  import::from(magrittr, "%T>%", "%$%", .into = "operadores")
  import::from(kableExtra, .except = "group_rows")
  import::from(cowplot, .except = "stamp")
  import::from(colorblindr, scale_fill_OkabeIto, palette_OkabeIto)
  import::from(conectigo, cargar_fuentes)
- 
+
  # cargar paquetes en el que sabemos necesitamos todas las opciones
- library(janitor)
- library(tidyverse)
- 
+ pacman::p_load(fitdistrplus, glue, tidyverse)
  # cargar las fuentes a utilizar
  cargar_fuentes()
  
@@ -386,7 +398,8 @@ knit_hooks$set(document = function(x) {sub('\\usepackage[]{color}',
  yunkel <- theme_cowplot(font_family = "yano") +
  	         theme(plot.margin = unit(c(6, 1, 1, 1), "mm"),
  	               axis.title = element_text(size = 12),
- 	               plot.title = element_text(size = 26),
+ 	               axis.text = element_text(size = 9),
+ 	               plot.title = element_text(size = 18),
  	               plot.subtitle = element_text(size = 12))
  
  # tema con grid horizontal y vertical
@@ -423,6 +436,12 @@ knit_hooks$set(document = function(x) {sub('\\usepackage[]{color}',
 <<eda, child='secciones/01_eda.Rnw'>>=
 
 @
+
+<<bib, child='secciones/09_bibliografia.Rnw'>>=
+
+@
+
+
 
 
 \end{document}

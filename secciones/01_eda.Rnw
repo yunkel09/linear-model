@@ -3,10 +3,10 @@
 \section{Paquetes}
 
 <<>>=
-import::from(skimr, skim)
-import::from(colorblindr, scale_fill_OkabeIto)
+import::from(inspectdf, inspect_cat, show_plot)
 import::from(DataExplorer, plot_intro)
-pacman::p_load(glue, tidyverse)
+import::from(formattable, color_tile)
+import::from(skimr, skim)
 @
 
 \section{Cargar datos}
@@ -18,7 +18,7 @@ bank <- read_csv(file      = "bank.csv",
 @
 
 <<eval=FALSE, include=FALSE>>=
-bank <- read_csv(file = "./bank.csv",
+bank <- read_csv(file = "./secciones/bank.csv",
                  col_types = "ciffdfiffff",
                  lazy = FALSE)
 @
@@ -33,42 +33,99 @@ plot_intro(bank, title = "Descripción de variables Bank Data", ggtheme = yunkel
 
 En la figura \ref{fig:intro} vemos que la mayoría de las columnas son discretas
 de tipo factor. No hay valores perdidos de tipo \ro{NA} y todas las filas están
-completas.
+completas. Exploremos más a fondo las variables categóricas.
 
 <<>>=
 bank %>%
-   skim() %>%
-   as_tibble() %>%
-   select(variable  = skim_variable,
-          tipo      = skim_type,
-          recuento  = factor.top_counts) |> 
-   tabla("Tipo de variable de acuerdo a su clasificación")
+	skim() %>%
+ as_tibble() %>%
+ select(variable  = skim_variable,
+        tipo      = skim_type,
+        recuento  = factor.top_counts) |> 
+ tabla("Tipo de variable de acuerdo a su clasificación")
 @
+
+
+\begin{figure}[H]
+<<fig.width=5, fig.height=2>>=
+bank |> select(-id) |> inspect_cat() |> show_plot(col_palette = 1)
+@
+\caption{Frecuencia variables categóricas}
+   \label{fig:cat}
+\end{figure}
+
+En el gráfico \ref{fig:cat} vemos que con excepción del \va{sex} el resto de
+variables categóricas presentan desbalance, siendo el más notorio el caso de
+\va{current\_act} y \va{save\_act}.
 
 \section{Distribución Income}
 
-Explore gráficamente la forma de la distribución de la variable “income” y haga
-un análisis estadístico descriptivo de dicha variable.
+Explore gráficamente la forma de la distribución de la variable \va{income} y
+haga un análisis estadístico descriptivo de dicha variable.
 
 \begin{figure}[H]
-<<>>=
+<<fig.width=5, fig.height=3>>=
 brk <- hist(bank[["income"]], plot = FALSE)$breaks
-
-bank %>% 
-	ggplot(aes(x = income, y = ..density..)) +
-	geom_histogram(fill   = "gray40",
-	               colour = "black",
-	               size   = .2,
-	               breaks = brk) +
-   scale_x_continuous(name   = "Income", breaks = brk) +
-	geom_density(size = 1) +
-	labs(title = "Income") + yunkel
+bank %>% ggplot(aes(x = income, y = ..density..)) +
+ geom_histogram(fill = "gray40", colour = "black", size = .2, breaks = brk) +
+ scale_x_continuous(name = "Income", breaks = brk) + geom_density(size = 1) +
+ labs(title = "Distribución del Ingreso") + yunkel
 @
-\caption{Interpretación de resultados}
+\caption{Distribución del Ingreso}
    \label{fig:dis}
 \end{figure}
 
 En la figura \ref{fig:dis} se observa que la distribución de la variable
-\va{income} es unimodal con sesgo positivo sin valores atípicos aparentes. 
+\va{income} es unimodal con sesgo positivo donde la mayoría de valores ocurren
+en las proximidades de valores mínimos. Esto es consistente con la definición de
+una distribución \textbf{log-normal} y hace sentido con base a
+\citep[pag. ~28]{fowlkes_lognormal_2018} en que es muy utilizada para modelar
+la distribución de los ingresos, sin embargo, hay distribuciones muy parecidas,
+como la distribuición \textbf{gamma}, que según el mismo autor, es muy similar, pero
+su cola no es tan \emph{heavy}. Para asegurarnos realizaremos una prueba
+de bondad de ajuste para determinar el tipo de distribución.
+
+\subsection{Bondad de ajuste}
+
+Usaremos el paque $\left \{fitdistrplus \right \}$ \citep{R-fitdistrplus}. Para
+comparar correctamente las distribuciones más similares, utilizaremos un método
+distinto de estimación para cada caso.
+
+<<>>=
+tipodis <- c("exp", "gamma", "lnorm")
+metodos <- c("mme", "mme", "mle")
+ingreso <- bank$income
+ajustes <- tipodis |> map2(.y = metodos, ~ fitdist(data = ingreso, distr = .x, method = .y))
+@
+
+<<>>=
+fun_prop <- list(
+ den = function(f) denscomp(f), 
+ qqc = function(f) qqcomp(f),
+ cdf = function(f) cdfcomp(f),
+ ppc = function(f) ppcomp(f))
+@
+
+\begin{figure}[H]
+<<fig.width=8, fig.asp=1>>=
+par(mfrow = c(2, 2)); walk(fun_prop, exec, f = ajustes) 
+@
+\caption{Interpretación de resultados}
+   \label{fig:ajus}
+\end{figure}
+
+
+<<bondad>>=
+gofstat(ajustes, fitnames = tipodis)[c(6, 8, 10, 12)] |> 
+ map_dfr(~ .x, .id = "test") |> tabla("Resultados prueba Bondad de Ajuste")
+@
+
+En la gráfica \ref{fig:ajus} vemos en cuatro cuadrantes los diferentes ajustes
+a las distintas distribuciones evaluadas. Se observa que la distribución
+\textbf{gamma} se ajusta ligeramente mejor que la distribución
+\textbf{log-normal}. Esto lo podemos confirmar en la tabla \ref{tab:bondad} en
+el que observamos los diferentes test para datos continuos: cvm para Cramer-von
+Mises, ad para Anderson-Darling y ks para Kolgomorov-Smirnov.
+
 
 
