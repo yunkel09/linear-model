@@ -389,7 +389,7 @@ knit_hooks$set(document = function(x) {sub('\\usepackage[]{color}',
  import::from(conectigo, cargar_fuentes)
 
  # cargar paquetes en el que sabemos necesitamos todas las opciones
- pacman::p_load(fitdistrplus, glue, tidyverse)
+ pacman::p_load(scales, fitdistrplus, glue, tidyverse)
  # cargar las fuentes a utilizar
  cargar_fuentes()
  
@@ -406,8 +406,8 @@ knit_hooks$set(document = function(x) {sub('\\usepackage[]{color}',
  drako <- theme_bw(base_family = "yano", base_size = 14) +
  	        theme(plot.margin = unit(c(6, 1, 1, 1), "mm"),
  	              axis.title = element_text(size = 12),
- 	              plot.title = element_text(size = 12),
- 	              plot.subtitle = element_text(size = 10))
+ 	              plot.title = element_text(size = 18),
+ 	              plot.subtitle = element_text(size = 12))
  
  
  

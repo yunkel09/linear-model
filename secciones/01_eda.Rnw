@@ -5,8 +5,8 @@
 <<>>=
 import::from(inspectdf, inspect_cat, show_plot)
 import::from(DataExplorer, plot_intro)
-import::from(formattable, color_tile)
 import::from(skimr, skim)
+pacman::p_load(ggridges)
 @
 
 \section{Cargar datos}
@@ -37,7 +37,7 @@ completas. Exploremos más a fondo las variables categóricas.
 
 <<>>=
 bank %>%
-	skim() %>%
+ skim() %>%
  as_tibble() %>%
  select(variable  = skim_variable,
         tipo      = skim_type,
@@ -79,11 +79,12 @@ En la figura \ref{fig:dis} se observa que la distribución de la variable
 \va{income} es unimodal con sesgo positivo donde la mayoría de valores ocurren
 en las proximidades de valores mínimos. Esto es consistente con la definición de
 una distribución \textbf{log-normal} y hace sentido con base a
-\citep[pag. ~28]{fowlkes_lognormal_2018} en que es muy utilizada para modelar
-la distribución de los ingresos, sin embargo, hay distribuciones muy parecidas,
-como la distribuición \textbf{gamma}, que según el mismo autor, es muy similar, pero
-su cola no es tan \emph{heavy}. Para asegurarnos realizaremos una prueba
-de bondad de ajuste para determinar el tipo de distribución.
+\citep[pag. ~28]{fowlkes_lognormal_2018} en que esta distribución es muy
+utilizada para modelar la distribución de los ingresos, sin embargo,
+hay distribuciones muy parecidas, como la distribuición \textbf{gamma}, que
+según el mismo autor, es muy similar, pero su cola no es tan \emph{heavy}. Para
+asegurarnos realizaremos una prueba de bondad de ajuste para determinar el tipo
+de distribución.
 
 \subsection{Bondad de ajuste}
 
@@ -126,6 +127,68 @@ a las distintas distribuciones evaluadas. Se observa que la distribución
 \textbf{log-normal}. Esto lo podemos confirmar en la tabla \ref{tab:bondad} en
 el que observamos los diferentes test para datos continuos: cvm para Cramer-von
 Mises, ad para Anderson-Darling y ks para Kolgomorov-Smirnov.
+
+\section{Split por Sexo}
+
+Segmente la variable utilizando la variable \va{sex} como criterio de
+segmentación y vuelva a hacer un análisis exploratorio grafico y analitico de
+las distribuciones por separado.
+
+<<>>=
+resumen <- list(min = ~ min(.x), max = ~ max(.x), med = ~ mean(.x), mid = ~ median(.x))
+by_sex <- bank |>
+ mutate(income = income/1e3) |> group_by(sex) |> summarise(across(income, resumen))
+@
+
+<<resumen-sex>>=
+by_sex |> tabla("Resumen del ingreso por sexo")
+@
+
+\begin{figure}[t]
+<<fig.asp=0.7>>=
+brk <- hist((bank[["income"]]/1e3), plot = FALSE)$breaks
+bank |> ggplot(aes(x = income/1e3, y = ..density..)) +
+ geom_histogram(aes(fill = sex), size = .2, colour = "black", breaks = brk) +
+ geom_density(size = 1) +
+ geom_vline(data = by_sex, aes(xintercept = income_med), color = "black", 
+            linetype = "dashed") +
+ scale_x_continuous(name = "Ingreso en Miles de dólares [000]", labels = dollar, 
+                    breaks = brk)  +
+ scale_fill_OkabeIto() + facet_grid(sex ~ ., scales = "free") +
+ labs(title = "Distribución del Ingreso por Sexo") + guides(fill = "none") + drako
+@
+\caption{Distribución del Ingreso por sexo}
+   \label{fig:bysex1}
+\end{figure}
+
+
+\begin{figure}[H]
+<<>>=
+bank %>% ggplot(aes(x = income/1e3, y = sex, fill = stat(x))) +
+ geom_density_ridges_gradient(scale = 3) +
+ scale_fill_viridis_c(name = "Ingreso", option = "C") +
+ scale_x_continuous(labels = dollar, breaks = seq(0, 65, 5)) +
+ ggtitle(label = "Distribución del Ingreso", subtitle = "Separado por sexo") +
+ xlab("Miles de dólares [000]") + ylab("Degree") + yunkel +
+ theme(axis.text = element_text(size = 12))
+@
+\caption{Análisis de densidadi}
+   \label{fig:dens}
+\end{figure}
+
+\begin{shaded}
+En la tabla \ref{tab:resumen-sex} se observa que tanto para la media como para la mediana el
+ingreso entre hombres y mujeres es bastante similar.  En el gráfico \ref{fig:dens} vemos que
+la forma de las distribuciones son bastantes parecidas con valles en ambos casos entre los
+\$20 y \$25K.  En la gráfica \ref{fig:bysex1} la separación de las cajas nos permite ver
+que hay un pequeño grupo de mujeres que ganan entre los \$60 y \$65K a diferencia de los
+hombres. También vemos que hay una mayor concentración de hombres entre los \$20 y \$25K.
+\end{shaded}
+
+\section{Diferencias}
+
+Existe una diferencia estadísticamente significativa entre los ingresos de los hombres y las
+mujeres?
 
 
 
