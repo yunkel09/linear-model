@@ -27,7 +27,7 @@ BoldItalicFont = Souvenir-BoldItalic.otf]
 
 \setmonofont[Scale=0.8,
              Contextuals = Alternate,
-             Ligatures = TeX]{JetBrains Mono}
+             Ligatures = TeX]{JetBrains Mono Medium}
              
              
 \usepackage{listings}
